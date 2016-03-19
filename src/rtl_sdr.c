@@ -114,7 +114,7 @@ int main(int argc, char **argv)
 	int gain = 0;
 	int ppm_error = 0;
 	int sync_mode = 0;
-	int direct_sp = 0;
+	int direct_sampling = 0;
 	FILE *file;
 	uint8_t *buffer;
 	int dev_index = 0;
@@ -208,7 +208,10 @@ int main(int argc, char **argv)
 	/* Set the frequency */
 	verbose_set_frequency(dev, frequency);
 	/* Direct Sampling */
-	verbose_set_direct_sampling(dev, direct_sampling);
+	if (0 != direct_sampling) {
+	/* Set Direct Sampling */
+	verbose_direct_sampling(dev, direct_sampling);
+	}
 	/* Set gain */
 	if (0 == gain) {
 		 /* Enable automatic gain */
