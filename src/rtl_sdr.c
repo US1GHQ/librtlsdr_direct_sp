@@ -202,16 +202,15 @@ int main(int argc, char **argv)
 #else
 	SetConsoleCtrlHandler( (PHANDLER_ROUTINE) sighandler, TRUE );
 #endif
+	/* Direct Sampling */
+	if (direct_sampling) {
+	verbose_direct_sampling(dev, direct_sampling);
+	}
 	/* Set the sample rate */
 	verbose_set_sample_rate(dev, samp_rate);
 
 	/* Set the frequency */
 	verbose_set_frequency(dev, frequency);
-	/* Direct Sampling */
-	if (0 != direct_sampling) {
-	/* Set Direct Sampling */
-	verbose_direct_sampling(dev, direct_sampling);
-	}
 	/* Set gain */
 	if (0 == gain) {
 		 /* Enable automatic gain */
