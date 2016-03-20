@@ -2,8 +2,6 @@
  * rtl-sdr, turns your Realtek RTL2832 based DVB dongle into a SDR receiver
  * Copyright (C) 2012 by Steve Markgraf <steve@steve-m.de>
  * Copyright (C) 2012-2013 by Hoernchen <la@tfc-server.de>
- * Frequency Lock [-l] Copyright (C) 2014 by Mario Rößler
- * Direct Sampling Flag [-q] by Phil Crump <phil@philcrump.co.uk>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -86,17 +84,12 @@ static int llbuf_num = 500;
 
 static volatile int do_exit = 0;
 
-int freq_lock = 0;
-int direct_sampling = 0;
-
 void usage(void)
 {
 	printf("rtl_tcp, an I/Q spectrum server for RTL2832 based DVB-T receivers\n\n"
 		"Usage:\t[-a listen address]\n"
 		"\t[-p listen port (default: 1234)]\n"
 		"\t[-f frequency to tune to [Hz]]\n"
-		"\t[-l 1] lock frequency against tcp command\n"
-		"\t[-q x] enable direct sampling (input I:1, Q:2)\n"
 		"\t[-g gain (default: 0 for auto)]\n"
 		"\t[-s samplerate in Hz (default: 2048000 Hz)]\n"
 		"\t[-b number of buffers (default: 15, set by library)]\n"
@@ -117,11 +110,7 @@ int gettimeofday(struct timeval *tv, void* ignored)
 		tmp <<= 32;
 		tmp |= ft.dwLowDateTime;
 		tmp /= 10;
-#ifdef _MSC_VER
-		tmp -= 11644473600000000Ui64;
-#else
 		tmp -= 11644473600000000ULL;
-#endif
 		tv->tv_sec = (long)(tmp / 1000000UL);
 		tv->tv_usec = (long)(tmp % 1000000UL);
 	}
@@ -310,25 +299,23 @@ static void *command_worker(void *arg)
 		}
 		switch(cmd.cmd) {
 		case 0x01:
-			printf("set freq %d\n", ntohl(cmd.param));
-			if(!freq_lock) {
-			    rtlsdr_set_center_freq(dev,ntohl(cmd.param));
-			}
+			printf("set freq %u\n", ntohl(cmd.param));
+			rtlsdr_set_center_freq(dev,ntohl(cmd.param));
 			break;
 		case 0x02:
-			printf("set sample rate %d\n", ntohl(cmd.param));
+			printf("set sample rate %u\n", ntohl(cmd.param));
 			rtlsdr_set_sample_rate(dev, ntohl(cmd.param));
 			break;
 		case 0x03:
-			printf("set gain mode %d\n", ntohl(cmd.param));
+			printf("set gain mode %u\n", ntohl(cmd.param));
 			rtlsdr_set_tuner_gain_mode(dev, ntohl(cmd.param));
 			break;
 		case 0x04:
-			printf("set gain %d\n", ntohl(cmd.param));
+			printf("set gain %u\n", ntohl(cmd.param));
 			rtlsdr_set_tuner_gain(dev, ntohl(cmd.param));
 			break;
 		case 0x05:
-			printf("set freq correction %d\n", ntohl(cmd.param));
+			printf("set freq correction %u\n", ntohl(cmd.param));
 			rtlsdr_set_freq_correction(dev, ntohl(cmd.param));
 			break;
 		case 0x06:
@@ -337,34 +324,31 @@ static void *command_worker(void *arg)
 			rtlsdr_set_tuner_if_gain(dev, tmp >> 16, (short)(tmp & 0xffff));
 			break;
 		case 0x07:
-			printf("set test mode %d\n", ntohl(cmd.param));
+			printf("set test mode %u\n", ntohl(cmd.param));
 			rtlsdr_set_testmode(dev, ntohl(cmd.param));
 			break;
 		case 0x08:
-			printf("set agc mode %d\n", ntohl(cmd.param));
+			printf("set agc mode %u\n", ntohl(cmd.param));
 			rtlsdr_set_agc_mode(dev, ntohl(cmd.param));
 			break;
 		case 0x09:
-			printf("set direct sampling %d\n", ntohl(cmd.param));
-			/* Pass through unless we've set it manually */
-			if(!direct_sampling) {
-			    rtlsdr_set_direct_sampling(dev, ntohl(cmd.param));
-			}
+			printf("set direct sampling %u\n", ntohl(cmd.param));
+			rtlsdr_set_direct_sampling(dev, ntohl(cmd.param));
 			break;
 		case 0x0a:
-			printf("set offset tuning %d\n", ntohl(cmd.param));
+			printf("set offset tuning %u\n", ntohl(cmd.param));
 			rtlsdr_set_offset_tuning(dev, ntohl(cmd.param));
 			break;
 		case 0x0b:
-			printf("set rtl xtal %d\n", ntohl(cmd.param));
+			printf("set rtl xtal %u\n", ntohl(cmd.param));
 			rtlsdr_set_xtal_freq(dev, ntohl(cmd.param), 0);
 			break;
 		case 0x0c:
-			printf("set tuner xtal %d\n", ntohl(cmd.param));
+			printf("set tuner xtal %u\n", ntohl(cmd.param));
 			rtlsdr_set_xtal_freq(dev, 0, ntohl(cmd.param));
 			break;
 		case 0x0d:
-			printf("set tuner gain by index %d\n", ntohl(cmd.param));
+			printf("set tuner gain by index %u\n", ntohl(cmd.param));
 			set_gain_by_index(dev, ntohl(cmd.param));
 			break;
 		default:
@@ -386,6 +370,7 @@ int main(int argc, char **argv)
 	int dev_given = 0;
 	int gain = 0;
 	int ppm_error = 0;
+	int custom_ppm = 0;
 	struct llist *curelem,*prev;
 	pthread_attr_t attr;
 	void *status;
@@ -403,7 +388,7 @@ int main(int argc, char **argv)
 	struct sigaction sigact, sigign;
 #endif
 
-	while ((opt = getopt(argc, argv, "a:p:f:g:s:b:n:d:P:l:q:")) != -1) {
+	while ((opt = getopt(argc, argv, "a:p:f:g:s:b:n:d:P:")) != -1) {
 		switch (opt) {
 		case 'd':
 			dev_index = verbose_device_search(optarg);
@@ -432,12 +417,7 @@ int main(int argc, char **argv)
 			break;
 		case 'P':
 			ppm_error = atoi(optarg);
-			break;
-		case 'l':
-			freq_lock = atoi(optarg);
-			break;
-		case 'q':
-			direct_sampling = atoi(optarg);
+			custom_ppm = 1;
 			break;
 		default:
 			usage();
@@ -476,6 +456,9 @@ int main(int argc, char **argv)
 #endif
 
 	/* Set the tuner error */
+	if (!custom_ppm) {
+		verbose_ppm_eeprom(dev, &ppm_error);
+	}
 	verbose_ppm_set(dev, ppm_error);
 
 	/* Set the sample rate */
@@ -489,11 +472,6 @@ int main(int argc, char **argv)
 		fprintf(stderr, "WARNING: Failed to set center freq.\n");
 	else
 		fprintf(stderr, "Tuned to %i Hz.\n", frequency);
-
-	if (0 != direct_sampling) {
-		/* Set direct sampling */
-		rtlsdr_set_direct_sampling(dev, direct_sampling);
-	}
 
 	if (0 == gain) {
 		 /* Enable automatic gain */

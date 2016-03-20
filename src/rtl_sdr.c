@@ -48,7 +48,6 @@ void usage(void)
 	fprintf(stderr,
 		"rtl_sdr, an I/Q recorder for RTL2832 based DVB-T receivers\n\n"
 		"Usage:\t -f frequency_to_tune_to [Hz]\n"
-		"\t[-q x] enable direct sampling (input I:1, Q:2)\n"
 		"\t[-s samplerate (default: 2048000 Hz)]\n"
 		"\t[-d device_index (default: 0)]\n"
 		"\t[-g gain (default: 0 for auto)]\n"
@@ -56,6 +55,8 @@ void usage(void)
 		"\t[-b output_block_size (default: 16 * 16384)]\n"
 		"\t[-n number of samples to read (default: 0, infinite)]\n"
 		"\t[-S force sync output (default: async)]\n"
+		"\t[-D direct_sampling_mode, 0 (default/off), 1 (I), 2 (Q), 3 (no-mod)]\n"
+		"\t[-N no dithering (default: use dithering)]\n"
 		"\tfilename (a '-' dumps samples to stdout)\n\n");
 	exit(1);
 }
@@ -115,6 +116,7 @@ int main(int argc, char **argv)
 	int ppm_error = 0;
 	int sync_mode = 0;
 	int direct_sampling = 0;
+	int dithering = 1;
 	FILE *file;
 	uint8_t *buffer;
 	int dev_index = 0;
@@ -123,7 +125,7 @@ int main(int argc, char **argv)
 	uint32_t samp_rate = DEFAULT_SAMPLE_RATE;
 	uint32_t out_block_size = DEFAULT_BUF_LENGTH;
 
-	while ((opt = getopt(argc, argv, "d:f:g:s:b:n:p:S:q")) != -1) {
+	while ((opt = getopt(argc, argv, "d:f:g:s:b:n:p:D:SN")) != -1) {
 		switch (opt) {
 		case 'd':
 			dev_index = verbose_device_search(optarg);
@@ -145,13 +147,16 @@ int main(int argc, char **argv)
 			out_block_size = (uint32_t)atof(optarg);
 			break;
 		case 'n':
-			bytes_to_read = (uint32_t)atof(optarg) * 2;
+			bytes_to_read = (uint32_t)atofs(optarg) * 2;
 			break;
 		case 'S':
 			sync_mode = 1;
 			break;
-		case 'q':
+		case 'D':
 			direct_sampling = atoi(optarg);
+			break;
+		case 'N':
+			dithering = 0;
 			break;
 		default:
 			usage();
@@ -202,16 +207,27 @@ int main(int argc, char **argv)
 #else
 	SetConsoleCtrlHandler( (PHANDLER_ROUTINE) sighandler, TRUE );
 #endif
-	/* Direct Sampling */
-	if (direct_sampling) {
-	verbose_direct_sampling(dev, direct_sampling);
+
+	if (!dithering) {
+		fprintf(stderr, "Disabling dithering...  ");
+		r = rtlsdr_set_dithering(dev, dithering);
+		if (r) {
+			fprintf(stderr, "failure\n");
+		} else {
+			fprintf(stderr, "success\n");
+		}
 	}
+
+	if (direct_sampling) {
+		verbose_direct_sampling(dev, direct_sampling);
+	}
+
 	/* Set the sample rate */
 	verbose_set_sample_rate(dev, samp_rate);
 
 	/* Set the frequency */
 	verbose_set_frequency(dev, frequency);
-	/* Set gain */
+
 	if (0 == gain) {
 		 /* Enable automatic gain */
 		verbose_auto_gain(dev);
