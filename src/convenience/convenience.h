@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2014 by Kyle Keen <keenerd@gmail.com>
+ * Copyright (C) 2014 by Kyle Keen <keenerd@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -14,6 +14,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#ifndef __CONVENIENCE_H
+#define __CONVENIENCE_H
+
 
 /* a collection of user friendly tools */
 
@@ -75,6 +78,17 @@ int verbose_set_frequency(rtlsdr_dev_t *dev, uint32_t frequency);
 int verbose_set_sample_rate(rtlsdr_dev_t *dev, uint32_t samp_rate);
 
 /*!
+ * Set device bandwidth and report status on stderr
+ *
+ * \param dev the device handle given by rtlsdr_open()
+ * \param frequency in Hz
+ * \return 0 on success
+ */
+
+int verbose_set_bandwidth(rtlsdr_dev_t *dev, uint32_t bandwidth);
+
+
+/*!
  * Enable or disable the direct sampling mode and report status on stderr
  *
  * \param dev the device handle given by rtlsdr_open()
@@ -123,15 +137,6 @@ int verbose_gain_set(rtlsdr_dev_t *dev, int gain);
 int verbose_ppm_set(rtlsdr_dev_t *dev, int ppm_error);
 
 /*!
- * Attempts to extract a correction value from eeprom and store it to an int.
- *
- * \param dev the device handle given by rtlsdr_open()
- * \param ppm_error correction value in parts per million (ppm)
- * \return 0 on success
- */
-int verbose_ppm_eeprom(rtlsdr_dev_t *dev, int *ppm_error);
-
-/*!
  * Reset buffer
  *
  * \param dev the device handle given by rtlsdr_open()
@@ -149,3 +154,7 @@ int verbose_reset_buffer(rtlsdr_dev_t *dev);
 
 int verbose_device_search(char *s);
 
+
+void executeInBackground( char * file, char * args, char * searchStr[], char * replaceStr[] );
+
+#endif /*__CONVENIENCE_H*/

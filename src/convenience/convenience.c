@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2014 by Kyle Keen <keenerd@gmail.com>
+ * Copyright (C) 2014 by Kyle Keen <keenerd@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,6 +22,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 #ifndef _WIN32
 #include <unistd.h>
@@ -29,6 +30,7 @@
 #include <windows.h>
 #include <fcntl.h>
 #include <io.h>
+#include <process.h>
 #define _USE_MATH_DEFINES
 #endif
 
@@ -43,6 +45,8 @@ double atofs(char *s)
 	int len;
 	double suff = 1.0;
 	len = strlen(s);
+	/* allow formatting spaces from .csv command file */
+	while ( len > 1 && isspace(s[len-1]) )	--len;
 	last = s[len-1];
 	s[len-1] = '\0';
 	switch (last) {
@@ -160,6 +164,25 @@ int verbose_set_sample_rate(rtlsdr_dev_t *dev, uint32_t samp_rate)
 	return r;
 }
 
+int verbose_set_bandwidth(rtlsdr_dev_t *dev, uint32_t bandwidth)
+{
+	int r;
+	uint32_t applied_bw = 0;
+	/* r = rtlsdr_set_tuner_bandwidth(dev, bandwidth); */
+	r = rtlsdr_set_and_get_tuner_bandwidth(dev, bandwidth, &applied_bw, 1 /* =apply_bw */);
+	if (r < 0) {
+		fprintf(stderr, "WARNING: Failed to set bandwidth.\n");
+	} else if (bandwidth > 0) {
+		if (applied_bw)
+			fprintf(stderr, "Bandwidth parameter %u Hz resulted in %u Hz.\n", bandwidth, applied_bw);
+		else
+			fprintf(stderr, "Set bandwidth parameter %u Hz.\n", bandwidth);
+	} else {
+		fprintf(stderr, "Bandwidth set to automatic resulted in %u Hz.\n", applied_bw);
+	}
+	return r;
+}
+
 int verbose_direct_sampling(rtlsdr_dev_t *dev, int on)
 {
 	int r;
@@ -174,8 +197,6 @@ int verbose_direct_sampling(rtlsdr_dev_t *dev, int on)
 		fprintf(stderr, "Enabled direct sampling mode, input 1/I.\n");}
 	if (on == 2) {
 		fprintf(stderr, "Enabled direct sampling mode, input 2/Q.\n");}
-	if (on == 3) {
-		fprintf(stderr, "Enabled no-mod direct sampling mode.\n");}
 	return r;
 }
 
@@ -184,7 +205,12 @@ int verbose_offset_tuning(rtlsdr_dev_t *dev)
 	int r;
 	r = rtlsdr_set_offset_tuning(dev, 1);
 	if (r != 0) {
-		fprintf(stderr, "WARNING: Failed to set offset tuning.\n");
+		if ( r == -2 )
+			fprintf(stderr, "WARNING: Failed to set offset tuning: tuner doesn't support offset tuning!\n");
+		else if ( r == -3 )
+			fprintf(stderr, "WARNING: Failed to set offset tuning: direct sampling not combinable with offset tuning!\n");
+		else
+			fprintf(stderr, "WARNING: Failed to set offset tuning.\n");
 	} else {
 		fprintf(stderr, "Offset tuning mode enabled.\n");
 	}
@@ -234,34 +260,6 @@ int verbose_ppm_set(rtlsdr_dev_t *dev, int ppm_error)
 	return r;
 }
 
-int verbose_ppm_eeprom(rtlsdr_dev_t *dev, int *ppm_error)
-{
-	#define start_char ' '
-	#define stop_char 'p'
-	int i, r, len, status = -1;
-	char vendor[256], product[256], serial[256];
-	r = rtlsdr_get_usb_strings(dev, vendor, product, serial);
-	if (r) {
-		return r;
-	}
-	len = strlen(serial);
-	if (len <= 3) {
-		return -1;}
-	if (serial[len-1] != stop_char) {
-		return -1;}
-	serial[len-1] = '\0';
-	for (i=len-3; i>=0; i--) {
-		if (serial[i] != start_char) {
-			continue;}
-		fprintf(stderr, "PPM calibration found in eeprom.\n");
-		status = 0;
-		*ppm_error = atoi(serial + i + 1);
-		break;
-	}
-	serial[len-1] = stop_char;
-	return status;
-}
-
 int verbose_reset_buffer(rtlsdr_dev_t *dev)
 {
 	int r;
@@ -275,7 +273,7 @@ int verbose_device_search(char *s)
 {
 	int i, device_count, device, offset;
 	char *s2;
-	char vendor[256] = {0}, product[256] = {0}, serial[256] = {0};
+	char vendor[256], product[256], serial[256];
 	device_count = rtlsdr_get_device_count();
 	if (!device_count) {
 		fprintf(stderr, "No supported devices found.\n");
@@ -283,11 +281,8 @@ int verbose_device_search(char *s)
 	}
 	fprintf(stderr, "Found %d device(s):\n", device_count);
 	for (i = 0; i < device_count; i++) {
-		if (rtlsdr_get_device_usb_strings(i, vendor, product, serial) == 0) {
-			fprintf(stderr, "  %d:  %s, %s, SN: %s\n", i, vendor, product, serial);
-		} else {
-			fprintf(stderr, "  %d:  %s\n", i, "Failed to query data");
-		}
+		rtlsdr_get_device_usb_strings(i, vendor, product, serial);
+		fprintf(stderr, "  %d:  %s, %s, SN: %s\n", i, vendor, product, serial);
 	}
 	fprintf(stderr, "\n");
 	/* does string look like raw id number */
@@ -333,5 +328,69 @@ int verbose_device_search(char *s)
 	fprintf(stderr, "No matching devices found.\n");
 	return -1;
 }
+
+#ifndef _WIN32
+
+void executeInBackground( char * file, char * args, char * searchStr[], char * replaceStr[] )
+{
+	pid_t pid;
+	char * argv[256] = { NULL };
+	int k, argc = 0;
+	argv[argc++] = file;
+	if (args) {
+		argv[argc] = strtok(args, " ");
+		while (argc < 256 && argv[argc]) {
+			argv[++argc] = strtok(NULL, " ");
+			for (k=0; argv[argc] && searchStr && replaceStr && searchStr[k] && replaceStr[k]; k++) {
+				if (!strcmp(argv[argc], searchStr[k])) {
+					argv[argc] = replaceStr[k];
+					break;
+				}
+			}
+		}
+	}
+
+	pid = fork();
+	switch (pid)
+	{
+	case -1:
+		/* Fork() has failed */
+		fprintf(stderr, "error: fork for '%s' failed!\n", file);
+		break;
+	case 0:
+		execvp(file, argv);
+		fprintf(stderr, "error: execv of '%s' from within fork failed!\n", file);
+		exit(10);
+		break;
+	default:
+		/* This is processed by the parent */
+		break;
+	}
+}
+
+#else
+
+void executeInBackground( char * file, char * args, char * searchStr[], char * replaceStr[] )
+{
+	char * argv[256] = { NULL };
+	int k, argc = 0;
+	argv[argc++] = file;
+ 	if (args) {
+		argv[argc] = strtok(args, " \t");
+		while (argc < 256 && argv[argc]) {
+			argv[++argc] = strtok(NULL, " \t");
+			for (k=0; argv[argc] && searchStr && replaceStr && searchStr[k] && replaceStr[k]; k++) {
+				if (!strcmp(argv[argc], searchStr[k])) {
+					argv[argc] = replaceStr[k];
+					break;
+				}
+			}
+		}
+	}
+
+	spawnvp(P_NOWAIT, file, argv);
+}
+
+#endif
 
 // vim: tabstop=8:softtabstop=8:shiftwidth=8:noexpandtab

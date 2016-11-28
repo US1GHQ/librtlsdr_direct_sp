@@ -22,7 +22,6 @@
 # Project setup
 ########################################################################
 cmake_minimum_required(VERSION 2.6)
-set(CMAKE_LEGACY_CYGWIN_WIN32 0)
 project(rtlsdr C)
 
 #select the release build type by default to get optimization flags
@@ -40,7 +39,7 @@ endif()
 
 # Set the version information here
 set(VERSION_INFO_MAJOR_VERSION 0) # increment major on api compatibility changes
-set(VERSION_INFO_MINOR_VERSION 5) # increment minor on feature-level changes
+set(VERSION_INFO_MINOR_VERSION 7) # increment minor on feature-level changes
 set(VERSION_INFO_PATCH_VERSION git) # increment patch for bug fixes and docs
 include(Version) # setup version info
 
@@ -57,6 +56,14 @@ if(CMAKE_COMPILER_IS_GNUCC AND NOT WIN32)
     #http://gcc.gnu.org/wiki/Visibility
     add_definitions(-fvisibility=hidden)
 endif()
+
+#########################################################################
+# Bug Fix
+#########################################################################
+OPTION(NEED_PTHREADS_WORKARROUND "PThreads Workarround for timespec")
+IF (DEFINED NEED_PTHREADS_WORKARROUND)
+    ADD_DEFINITIONS(-DNEED_PTHREADS_WORKARROUND)
+ENDIF()
 
 ########################################################################
 # Find build dependencies
