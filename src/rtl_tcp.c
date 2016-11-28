@@ -368,6 +368,7 @@ static void *command_worker(void *arg)
 			if(!direct_sampling) {
 			rtlsdr_set_direct_sampling(dev, ntohl(cmd.param));
 				}
+			break;
 		case SET_OFFSET_TUNING:
 			printf("set offset tuning %d\n", ntohl(cmd.param));
 			rtlsdr_set_offset_tuning(dev, ntohl(cmd.param));
