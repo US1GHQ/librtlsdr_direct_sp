@@ -43,7 +43,7 @@ enum RTL_TCP_COMMANDS {
     SET_TUNER_GAIN_BY_INDEX   = 0x0D,
     SET_TUNER_BANDWIDTH       = 0x0E,
     SET_BIAS_TEE              = 0x0F,
-    ENABLE_DIRECT_SAMPLING:   = 0x10
+    ENABLE_DIRECT_SAMPLING    = 0x10
 };
 
 #ifdef __cplusplus
