@@ -91,6 +91,9 @@ static int llbuf_num = 500;
 
 static volatile int do_exit = 0;
 
+int freq_lock = 0;
+int direct_sampling = 0;
+
 void usage(void)
 {
 	printf("rtl_tcp, an I/Q spectrum server for RTL2832 based DVB-T receivers\n\n"
@@ -110,6 +113,7 @@ void usage(void)
 		"\t[-T enable bias-T on GPIO PIN 0 (works for rtl-sdr.com v3 dongles)]\n"
 		"\t[-D direct_sampling_mode (default: 0, 1 = I, 2 = Q, 3 = I below threshold, 4 = Q below threshold)]\n"
 		"\t[-D direct_sampling_threshold_frequency (default: 0 use tuner specific frequency threshold for 3 and 4)]\n"
+		"\t[-Q enable direct sampling (input I:1, Q:2)]\n"
 		"\t[-v increase verbosity (default: 0)]\n");
 	exit(1);
 }
@@ -360,6 +364,10 @@ static void *command_worker(void *arg)
 			printf("set direct sampling %d\n", ntohl(cmd.param));
 			rtlsdr_set_direct_sampling(dev, ntohl(cmd.param));
 			break;
+		case ENABLE_DIRECT_SAMPLING:
+			if(!direct_sampling) {
+			rtlsdr_set_direct_sampling(dev, ntohl(cmd.param));
+				}
 		case SET_OFFSET_TUNING:
 			printf("set offset tuning %d\n", ntohl(cmd.param));
 			rtlsdr_set_offset_tuning(dev, ntohl(cmd.param));
@@ -566,6 +574,9 @@ int main(int argc, char **argv)
 			else
 				ds_threshold = ds_temp;
 			break;
+		case 'Q':
+			direct_sampling = atoi(optarg);
+			break;
 		default:
 			usage();
 			break;
@@ -607,6 +618,12 @@ int main(int argc, char **argv)
 
 	/* Set the tuner error */
 	verbose_ppm_set(dev, ppm_error);
+
+	/* Enable Direct Sampling mode */
+	if (0 != direct_sampling) {
+	/* Set direct sampling */
+	rtlsdr_set_direct_sampling(dev, direct_sampling);
+	}
 
 	/* Set the sample rate */
 	r = rtlsdr_set_sample_rate(dev, samp_rate);
